@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "HabitCheck",
+    "slug": "HabitCheck",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#6C63FF"
+      },
+      "package": "com.habitcheck.app"
+    },
+    "plugins": [],
+    "extra": {
+      "eas": {
+        "projectId": "d95a8c61-fd67-4fa8-bf37-878929ddaf88"
+      }
+    }
+  }
+}
