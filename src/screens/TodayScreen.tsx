@@ -16,6 +16,7 @@ export default function TodayScreen() {
   const { habits, completed, total, loading, checkIn, refresh } = useTodayHabits();
   const insets = useSafeAreaInsets();
   const [showAddSheet, setShowAddSheet] = useState(false);
+  const [editHabit, setEditHabit] = useState<typeof habits[number] | undefined>(undefined);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
 
   // 每次切到此 Tab 时刷新数据
@@ -24,6 +25,15 @@ export default function TodayScreen() {
   );
 
   const handleCloseAll = () => setOpenCardId(null);
+
+  const handleEdit = (habit: typeof habits[number]) => {
+    setEditHabit(habit);
+  };
+
+  const closeSheet = () => {
+    setShowAddSheet(false);
+    setEditHabit(undefined);
+  };
 
   const handleArchive = (habitId: string) => {
     updateHabit(habitId, { archived: true });
@@ -64,7 +74,7 @@ export default function TodayScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <HabitCard habit={item} onCheckIn={checkIn} onArchive={handleArchive} onDelete={handleDelete}
+          <HabitCard habit={item} onCheckIn={checkIn} onEdit={handleEdit} onArchive={handleArchive} onDelete={handleDelete}
             isOpen={openCardId === item.id}
             onOpenChange={(open) => setOpenCardId(open ? item.id : null)}
           />
@@ -80,11 +90,12 @@ export default function TodayScreen() {
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
 
-      {/* 添加任务弹窗 */}
+      {/* 添加/编辑任务弹窗 */}
       <AddTaskSheet
-        visible={showAddSheet}
-        onClose={() => setShowAddSheet(false)}
+        visible={showAddSheet || !!editHabit}
+        onClose={closeSheet}
         onSaved={refresh}
+        editHabit={editHabit}
       />
     </View>
   );

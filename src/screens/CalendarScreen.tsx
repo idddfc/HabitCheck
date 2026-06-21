@@ -1,9 +1,9 @@
-// 日历 Tab — 月视图 + 打卡打点 + 日期详情
+// 日历 Tab — 月视图 + 内联日期详情
 
 import React, { useState, useCallback } from 'react';
-import { View, Text, Modal, TouchableOpacity, ScrollView, StyleSheet, Dimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, fontSizes, spacing, borderRadius, shadows } from '../theme';
 import { getHabits, getAllCheckins, getToday } from '../utils/storage';
@@ -31,12 +31,14 @@ export default function CalendarScreen() {
   const [markedDates, setMarkedDates] = useState<Record<string, any>>({});
   const [selectedDay, setSelectedDay] = useState<DayDetail | null>(null);
   const [currentMonth, setCurrentMonth] = useState(() => getToday().slice(0, 7));
+  const selectedDateRef = React.useRef(getToday());
 
-  useFocusEffect(
-    useCallback(() => {
-      loadCalendarData();
-    }, []),
-  );
+  useFocusEffect(useCallback(() => { refreshData(); }, []));
+
+  function refreshData() {
+    loadCalendarData();
+    handleDayPress({ dateString: selectedDateRef.current } as DateData);
+  }
 
   function loadCalendarData() {
     const allHabits = getHabits(true);
@@ -49,36 +51,25 @@ export default function CalendarScreen() {
       list.push(c);
       checkinsByDate.set(c.date, list);
     }
-
-    const habitMap = new Map<string, Habit>();
-    for (const h of allHabits) habitMap.set(h.id, h);
+    const habitMap = new Map(allHabits.map(h => [h.id, h]));
 
     const marks: Record<string, any> = {};
     for (const [date, checkins] of checkinsByDate) {
-      const dots = checkins.map((c) => {
-        const habit = habitMap.get(c.habitId);
-        return { color: habit?.color || colors.primary };
-      });
-      marks[date] = { dots };
+      marks[date] = { dots: checkins.map(c => ({ color: habitMap.get(c.habitId)?.color || colors.primary })) };
     }
-
-    if (!marks[today]) {
-      marks[today] = { selected: true, selectedColor: colors.primary + '20', selectedTextColor: colors.primary };
-    } else {
-      marks[today] = { ...marks[today], selected: true, selectedColor: colors.primary + '20', selectedTextColor: colors.primary };
-    }
-
+    // 标记当前选中的日期
+    const sel = selectedDateRef.current;
+    marks[sel] = { ...marks[sel], selected: true, selectedColor: colors.primary + '20', selectedTextColor: colors.primary };
     setMarkedDates(marks);
   }
 
   function handleDayPress(day: DateData) {
     const dateStr = day.dateString;
+    selectedDateRef.current = dateStr;
     const allHabits = getHabits(true);
     const allCheckins = getAllCheckins();
-    const habitMap = new Map(allHabits.map((h) => [h.id, h]));
-
-    const dayCheckins = allCheckins.filter((c) => c.date === dateStr);
-    const completedIds = new Set(dayCheckins.map((c) => c.habitId));
+    const todayCheckins = allCheckins.filter(c => c.date === dateStr);
+    const completedIds = new Set(todayCheckins.map(c => c.habitId));
 
     const completed: Habit[] = [];
     const missed: Habit[] = [];
@@ -90,93 +81,84 @@ export default function CalendarScreen() {
       if (completedIds.has(habit.id)) completed.push(habit);
       else missed.push(habit);
     }
-
     setSelectedDay({ date: dateStr, completed, missed });
+    loadCalendarData(); // 更新日历上的选中标记
   }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <Calendar
-        current={currentMonth}
-        onMonthChange={(m: DateData) => setCurrentMonth(m.dateString.slice(0, 7))}
-        markingType="multi-dot"
-        markedDates={markedDates}
-        onDayPress={handleDayPress}
-        theme={calendarTheme}
-        firstDay={1}
-        enableSwipeMonths
-        {...zhLocale}
-      />
+      <ScrollView>
+        <Calendar
+          current={currentMonth}
+          onMonthChange={(m: DateData) => setCurrentMonth(m.dateString.slice(0, 7))}
+          markingType="multi-dot"
+          markedDates={markedDates}
+          onDayPress={handleDayPress}
+          theme={calendarTheme}
+          firstDay={1} enableSwipeMonths
+          {...zhLocale}
+        />
 
-      <Modal visible={selectedDay !== null} transparent animationType="fade" onRequestClose={() => setSelectedDay(null)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSelectedDay(null)}>
-          <TouchableOpacity style={styles.modalContent} activeOpacity={1}>
-            <Text style={styles.modalTitle}>{selectedDay?.date}</Text>
-
-            {selectedDay && selectedDay.completed.length === 0 && selectedDay.missed.length === 0 ? (
+        {/* 内联日期详情 */}
+        {selectedDay && (
+          <View style={styles.detailBox}>
+            <Text style={styles.detailDate}>{selectedDay.date}</Text>
+            {selectedDay.completed.length === 0 && selectedDay.missed.length === 0 ? (
               <Text style={styles.noData}>当天无任务</Text>
             ) : (
-              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-                {selectedDay && selectedDay.completed.length > 0 && (
+              <>
+                {selectedDay.completed.length > 0 && (
                   <>
                     <Text style={styles.sectionTitle}>✅ 已完成</Text>
-                    {selectedDay.completed.map((h) => (
+                    {selectedDay.completed.map(h => (
                       <View key={h.id} style={styles.habitRow}>
-                        <Text style={styles.habitEmoji}>{h.emoji}</Text>
+                        <Text style={styles.emoji}>{h.emoji}</Text>
                         <Text style={styles.habitName}>{h.name}</Text>
                       </View>
                     ))}
                   </>
                 )}
-                {selectedDay && selectedDay.missed.length > 0 && (
+                {selectedDay.missed.length > 0 && (
                   <>
                     <Text style={styles.sectionTitle}>❌ 未完成</Text>
-                    {selectedDay.missed.map((h) => (
+                    {selectedDay.missed.map(h => (
                       <View key={h.id} style={styles.habitRow}>
-                        <Text style={styles.habitEmoji}>{h.emoji}</Text>
+                        <Text style={styles.emoji}>{h.emoji}</Text>
                         <Text style={styles.habitName}>{h.name}</Text>
                       </View>
                     ))}
                   </>
                 )}
-              </ScrollView>
+              </>
             )}
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
 
 const calendarTheme = {
-  backgroundColor: colors.background,
-  calendarBackground: colors.background,
-  selectedDayBackgroundColor: colors.primary,
-  selectedDayTextColor: '#FFFFFF',
-  todayTextColor: colors.primary,
-  dayTextColor: colors.textPrimary,
-  textDisabledColor: '#D0D5DD',
-  monthTextColor: colors.textPrimary,
-  textMonthFontWeight: '700' as const,
-  textMonthFontSize: fontSizes.h2,
-  textDayFontSize: fontSizes.body - 1,
-  textDayHeaderFontSize: fontSizes.caption,
-  arrowColor: colors.primary,
-  dotColor: colors.primary,
+  backgroundColor: colors.background, calendarBackground: colors.background,
+  selectedDayBackgroundColor: colors.primary, selectedDayTextColor: '#FFFFFF',
+  todayTextColor: colors.primary, dayTextColor: colors.textPrimary,
+  textDisabledColor: '#D0D5DD', monthTextColor: colors.textPrimary,
+  textMonthFontWeight: '700' as const, textMonthFontSize: fontSizes.h2,
+  textDayFontSize: fontSizes.body - 1, textDayHeaderFontSize: fontSizes.caption,
+  arrowColor: colors.primary, dotColor: colors.primary,
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, paddingTop: spacing.md },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: {
-    backgroundColor: colors.cardBackground, borderRadius: borderRadius.lg,
-    width: SCREEN_WIDTH - spacing.xl * 2, maxHeight: 360, padding: spacing.lg, ...shadows.card,
+  container: { flex: 1, backgroundColor: colors.background },
+  detailBox: {
+    marginHorizontal: spacing.lg, marginTop: spacing.md, padding: spacing.md,
+    backgroundColor: colors.cardBackground, borderRadius: borderRadius.md,
+    minHeight: 100, ...shadows.card,
   },
-  modalScroll: { maxHeight: 240 },
-  modalTitle: { fontSize: fontSizes.h2, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.md, textAlign: 'center' },
+  detailDate: { fontSize: fontSizes.h2, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.sm },
   noData: { fontSize: fontSizes.body, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.lg },
-  sectionTitle: { fontSize: fontSizes.caption, fontWeight: '600', color: colors.textSecondary, marginBottom: spacing.sm, marginTop: spacing.sm },
-  habitRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs + 2 },
-  habitEmoji: { fontSize: 20, marginRight: spacing.sm },
+  sectionTitle: { fontSize: fontSizes.caption, fontWeight: '600', color: colors.textSecondary, marginBottom: spacing.xs, marginTop: spacing.sm },
+  habitRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs },
+  emoji: { fontSize: 20, marginRight: spacing.sm },
   habitName: { fontSize: fontSizes.body, color: colors.textPrimary },
 });

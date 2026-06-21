@@ -12,13 +12,14 @@ const ACTION_WIDTH = 140;
 interface HabitCardProps {
   habit: HabitWithStatus;
   onCheckIn: (habitId: string) => void;
+  onEdit: (habit: HabitWithStatus) => void;
   onArchive: (habitId: string) => void;
   onDelete: (habitId: string) => void;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export default function HabitCard({ habit, onCheckIn, onArchive, onDelete, isOpen, onOpenChange }: HabitCardProps) {
+export default function HabitCard({ habit, onCheckIn, onEdit, onArchive, onDelete, isOpen, onOpenChange }: HabitCardProps) {
   const translateX = useRef(new Animated.Value(0)).current;
 
   // 打卡弹簧
@@ -46,12 +47,19 @@ export default function HabitCard({ habit, onCheckIn, onArchive, onDelete, isOpe
 
   const panResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy),
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 5 || Math.abs(gs.dy) > 5,
       onPanResponderMove: (_, gs) => {
         const offset = isOpen ? ACTION_WIDTH : 0;
         translateX.setValue(Math.min(0, Math.max(-ACTION_WIDTH, gs.dx + offset)));
       },
       onPanResponderRelease: (_, gs) => {
+        const totalMove = Math.abs(gs.dx) + Math.abs(gs.dy);
+        // 几乎没移动 → 点击 → 打开编辑
+        if (totalMove < 10 && !isOpen) {
+          onEdit(habit);
+          return;
+        }
         if (gs.dx < SWIPE_THRESHOLD) {
           onOpenChange(true);
         } else if (gs.dx > 10) {

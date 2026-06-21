@@ -11,18 +11,21 @@ import CalendarScreen from './src/screens/CalendarScreen';
 import StatsScreen from './src/screens/StatsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import { colors } from './src/theme';
-import { initStorage } from './src/utils/storage';
-import { setNotificationHandler, requestPermission } from './src/utils/notifications';
+import { initStorage, getHabits } from './src/utils/storage';
+import { setNotificationHandler, requestPermission, rescheduleAllNotifications } from './src/utils/notifications';
 
 const Tab = createBottomTabNavigator();
 
 export default function App() {
   const navigationRef = useRef<NavigationContainerRef<any>>(null);
 
-  // 首次启动写入示例数据 + 请求通知权限
+  // 首次启动写入示例数据 + 请求通知权限 + 恢复通知调度
   useEffect(() => {
     initStorage();
-    requestPermission();
+    requestPermission().then(() => {
+      const habits = getHabits(true);
+      rescheduleAllNotifications(habits);
+    });
   }, []);
 
   // 通知点击 → 跳转今日 Tab

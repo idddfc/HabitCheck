@@ -4,7 +4,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Paths, Directory } from 'expo-file-system';
+import { Paths, Directory, File } from 'expo-file-system';
 import { colors, fontSizes, spacing, borderRadius, shadows } from '../theme';
 import { getHabits, updateHabit } from '../utils/storage';
 import type { Habit } from '../types';
@@ -33,6 +33,9 @@ export default function SettingsScreen() {
           try {
             const dir = new Directory(Paths.document, 'habitcheck');
             if (dir.exists) dir.delete();
+            // 重建 initialized 标记，防止下次启动重新写入示例数据
+            dir.create();
+            new File(dir, 'initialized').create();
           } catch {}
         },
       },
