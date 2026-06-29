@@ -4,6 +4,7 @@
 import { Paths, Directory, File } from 'expo-file-system';
 import { randomUUID } from 'expo-crypto';
 import { Habit, CheckIn } from '../types';
+import { cancelNotification } from './notifications';
 
 // --- 惰性获取数据目录和文件 ---
 let _dataDir: Directory | null = null;
@@ -105,6 +106,7 @@ export function updateHabit(id: string, updates: Partial<Omit<Habit, 'id' | 'cre
 export function deleteHabit(id: string): void {
   writeJSON(habitsFile(), getHabits(true).filter(h => h.id !== id));
   deleteCheckinsByHabitId(id);
+  cancelNotification(id);
 }
 
 // --- CheckIns CRUD ---
@@ -116,10 +118,10 @@ export function getCheckins(habitId?: string, date?: string): CheckIn[] {
   return list;
 }
 
-export function addCheckin(habitId: string): CheckIn | null {
-  const today = getToday();
-  if (getCheckins(habitId, today).length > 0) return null;
-  const c: CheckIn = { id: randomUUID(), habitId, date: today, completedAt: new Date().toISOString() };
+export function addCheckin(habitId: string, date?: string): CheckIn | null {
+  const targetDate = date || getToday();
+  if (getCheckins(habitId, targetDate).length > 0) return null;
+  const c: CheckIn = { id: randomUUID(), habitId, date: targetDate, completedAt: new Date().toISOString() };
   const all = getCheckins();
   all.push(c);
   writeJSON(checkinsFile(), all);

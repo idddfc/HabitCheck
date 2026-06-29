@@ -1,12 +1,12 @@
 // 日历 Tab — 月视图 + 内联日期详情
 
 import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, fontSizes, spacing, borderRadius, shadows } from '../theme';
-import { getHabits, getAllCheckins, getToday } from '../utils/storage';
+import { getHabits, getAllCheckins, getToday, addCheckin } from '../utils/storage';
 import { isHabitDueOn } from '../utils/streak';
 import type { Habit, CheckIn } from '../types';
 
@@ -66,6 +66,11 @@ export default function CalendarScreen() {
   function handleDayPress(day: DateData) {
     const dateStr = day.dateString;
     selectedDateRef.current = dateStr;
+    loadDayDetail(dateStr);
+    loadCalendarData(); // 更新日历上的选中标记
+  }
+
+  function loadDayDetail(dateStr: string) {
     const allHabits = getHabits(true);
     const allCheckins = getAllCheckins();
     const todayCheckins = allCheckins.filter(c => c.date === dateStr);
@@ -82,7 +87,13 @@ export default function CalendarScreen() {
       else missed.push(habit);
     }
     setSelectedDay({ date: dateStr, completed, missed });
-    loadCalendarData(); // 更新日历上的选中标记
+  }
+
+  function handleCatchUp(habitId: string) {
+    const dateStr = selectedDateRef.current;
+    addCheckin(habitId, dateStr);
+    loadDayDetail(dateStr);
+    loadCalendarData();
   }
 
   return (
@@ -125,6 +136,9 @@ export default function CalendarScreen() {
                       <View key={h.id} style={styles.habitRow}>
                         <Text style={styles.emoji}>{h.emoji}</Text>
                         <Text style={styles.habitName}>{h.name}</Text>
+                        <TouchableOpacity style={styles.catchUpBtn} onPress={() => handleCatchUp(h.id)}>
+                          <Text style={styles.catchUpText}>补签</Text>
+                        </TouchableOpacity>
                       </View>
                     ))}
                   </>
@@ -160,5 +174,12 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: fontSizes.caption, fontWeight: '600', color: colors.textSecondary, marginBottom: spacing.xs, marginTop: spacing.sm },
   habitRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs },
   emoji: { fontSize: 20, marginRight: spacing.sm },
-  habitName: { fontSize: fontSizes.body, color: colors.textPrimary },
+  habitName: { fontSize: fontSizes.body, color: colors.textPrimary, flex: 1 },
+  catchUpBtn: {
+    backgroundColor: colors.success,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: borderRadius.sm,
+  },
+  catchUpText: { color: '#FFFFFF', fontSize: fontSizes.small, fontWeight: '600' },
 });

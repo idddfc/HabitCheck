@@ -42,7 +42,6 @@ export default function TodayScreen() {
   };
   const handleDelete = (habitId: string) => {
     deleteHabit(habitId);
-    cancelNotification(habitId);
     refresh();
   };
 
