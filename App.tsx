@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import TodayScreen from './src/screens/TodayScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
 import StatsScreen from './src/screens/StatsScreen';
+import PomodoroScreen from './src/screens/PomodoroScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import { colors } from './src/theme';
 import { initStorage, getHabits } from './src/utils/storage';
@@ -80,6 +81,16 @@ export default function App() {
             tabBarLabel: '统计',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="stats-chart-outline" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Pomodoro"
+          component={PomodoroScreen}
+          options={{
+            tabBarLabel: '番茄钟',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="timer-outline" size={size} color={color} />
             ),
           }}
         />

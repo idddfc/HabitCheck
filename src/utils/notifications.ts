@@ -85,6 +85,37 @@ export function setNotificationHandler(onPress?: () => void): void {
   try { _mod.addNotificationResponseReceivedListener(() => onPress()); } catch {}
 }
 
+// ====== 一次性通知（日程事件用）======
+export async function scheduleOneTimeNotification(
+  eventId: string, title: string, dateStr: string, timeStr: string, remindBeforeMinutes: number,
+): Promise<void> {
+  if (_isExpoGo || !_mod) return;
+  try {
+    const [hour, minute] = timeStr.split(':').map(Number);
+    const triggerDate = new Date(`${dateStr}T${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:00`);
+    triggerDate.setMinutes(triggerDate.getMinutes() - remindBeforeMinutes);
+    if (triggerDate <= new Date()) return; // 已经过期
+    await _mod.scheduleNotificationAsync({
+      identifier: 'event_' + eventId,
+      content: {
+        title: '📋 日程提醒',
+        body: title,
+        sound: true,
+        ...(Platform.OS === 'android' ? { channelId: 'habit-reminder' } : {}),
+      },
+      trigger: {
+        type: _mod.SchedulableTriggerInputTypes.DATE,
+        date: triggerDate,
+      },
+    });
+  } catch {}
+}
+
+export async function cancelEventNotification(eventId: string): Promise<void> {
+  if (_isExpoGo || !_mod) return;
+  try { await _mod.cancelScheduledNotificationAsync('event_' + eventId); } catch {}
+}
+
 /** 启动时恢复所有习惯的通知调度（用于首次安装 / 重启后恢复） */
 export async function rescheduleAllNotifications(
   habits: { id: string; name: string; emoji: string; reminderTime: string | null }[],

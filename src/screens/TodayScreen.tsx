@@ -35,13 +35,14 @@ export default function TodayScreen() {
     setEditHabit(undefined);
   };
 
-  const handleArchive = (habitId: string) => {
+  const handleArchive = async (habitId: string) => {
     updateHabit(habitId, { archived: true });
-    cancelNotification(habitId);
+    await cancelNotification(habitId);
     refresh();
   };
-  const handleDelete = (habitId: string) => {
+  const handleDelete = async (habitId: string) => {
     deleteHabit(habitId);
+    await cancelNotification(habitId);
     refresh();
   };
 

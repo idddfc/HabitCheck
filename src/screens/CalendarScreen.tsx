@@ -1,14 +1,17 @@
-// 日历 Tab — 月视图 + 内联日期详情
+// 日历 Tab — 月视图 + 内联日期详情 + 日程事件 v1.1.0
 
 import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Alert } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, fontSizes, spacing, borderRadius, shadows } from '../theme';
 import { getHabits, getAllCheckins, getToday, addCheckin } from '../utils/storage';
 import { isHabitDueOn } from '../utils/streak';
-import type { Habit, CheckIn } from '../types';
+import { getEvents, deleteEvent } from '../utils/schedule';
+import { cancelEventNotification } from '../utils/notifications';
+import AddEventSheet from '../components/AddEventSheet';
+import type { Habit, CheckIn, ScheduleEvent } from '../types';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -24,6 +27,8 @@ interface DayDetail {
   date: string;
   completed: Habit[];
   missed: Habit[];
+  events: ScheduleEvent[];
+  countdowns: { title: string; daysLeft: number }[];
 }
 
 export default function CalendarScreen() {
@@ -31,6 +36,7 @@ export default function CalendarScreen() {
   const [markedDates, setMarkedDates] = useState<Record<string, any>>({});
   const [selectedDay, setSelectedDay] = useState<DayDetail | null>(null);
   const [currentMonth, setCurrentMonth] = useState(() => getToday().slice(0, 7));
+  const [showAddEvent, setShowAddEvent] = useState(false);
   const selectedDateRef = React.useRef(getToday());
 
   useFocusEffect(useCallback(() => { refreshData(); }, []));
@@ -43,7 +49,7 @@ export default function CalendarScreen() {
   function loadCalendarData() {
     const allHabits = getHabits(true);
     const allCheckins = getAllCheckins();
-    const today = getToday();
+    const allEvents = getEvents();
 
     const checkinsByDate = new Map<string, CheckIn[]>();
     for (const c of allCheckins) {
@@ -55,9 +61,16 @@ export default function CalendarScreen() {
 
     const marks: Record<string, any> = {};
     for (const [date, checkins] of checkinsByDate) {
-      marks[date] = { dots: checkins.map(c => ({ color: habitMap.get(c.habitId)?.color || colors.primary })) };
+      const dots = checkins.map(c => ({ key: 'c' + c.id, color: habitMap.get(c.habitId)?.color || colors.primary }));
+      marks[date] = { dots };
     }
-    // 标记当前选中的日期
+    // 日程事件标记（红色圆点）
+    for (const e of allEvents) {
+      const m = marks[e.date] || {};
+      const dots = m.dots || [];
+      dots.push({ key: 'e' + e.id, color: colors.danger });
+      marks[e.date] = { ...m, dots };
+    }
     const sel = selectedDateRef.current;
     marks[sel] = { ...marks[sel], selected: true, selectedColor: colors.primary + '20', selectedTextColor: colors.primary };
     setMarkedDates(marks);
@@ -73,8 +86,8 @@ export default function CalendarScreen() {
   function loadDayDetail(dateStr: string) {
     const allHabits = getHabits(true);
     const allCheckins = getAllCheckins();
-    const todayCheckins = allCheckins.filter(c => c.date === dateStr);
-    const completedIds = new Set(todayCheckins.map(c => c.habitId));
+    const dayCheckins = allCheckins.filter(c => c.date === dateStr);
+    const completedIds = new Set(dayCheckins.map(c => c.habitId));
 
     const completed: Habit[] = [];
     const missed: Habit[] = [];
@@ -86,13 +99,34 @@ export default function CalendarScreen() {
       if (completedIds.has(habit.id)) completed.push(habit);
       else missed.push(habit);
     }
-    setSelectedDay({ date: dateStr, completed, missed });
+
+    const dayEvents = getEvents(dateStr);
+    const countdowns: { title: string; daysLeft: number }[] = [];
+    const today = getToday();
+    const allEvents = getEvents();
+    for (const e of allEvents) {
+      if (e.date >= today && e.date > dateStr) {
+        const d1 = new Date(dateStr + 'T00:00:00');
+        const d2 = new Date(e.date + 'T00:00:00');
+        const diff = Math.ceil((d2.getTime() - d1.getTime()) / 86400000);
+        if (diff > 0) countdowns.push({ title: e.title, daysLeft: diff });
+      }
+    }
+
+    setSelectedDay({ date: dateStr, completed, missed, events: dayEvents, countdowns });
   }
 
   function handleCatchUp(habitId: string) {
     const dateStr = selectedDateRef.current;
     addCheckin(habitId, dateStr);
     loadDayDetail(dateStr);
+    loadCalendarData();
+  }
+
+  function handleDeleteEvent(eventId: string) {
+    deleteEvent(eventId);
+    cancelEventNotification(eventId);
+    loadDayDetail(selectedDateRef.current);
     loadCalendarData();
   }
 
@@ -114,7 +148,7 @@ export default function CalendarScreen() {
         {selectedDay && (
           <View style={styles.detailBox}>
             <Text style={styles.detailDate}>{selectedDay.date}</Text>
-            {selectedDay.completed.length === 0 && selectedDay.missed.length === 0 ? (
+            {selectedDay.completed.length === 0 && selectedDay.missed.length === 0 && selectedDay.events.length === 0 ? (
               <Text style={styles.noData}>当天无任务</Text>
             ) : (
               <>
@@ -143,11 +177,42 @@ export default function CalendarScreen() {
                     ))}
                   </>
                 )}
+                {selectedDay.events.length > 0 && (
+                  <>
+                    <Text style={styles.sectionTitle}>📋 日程</Text>
+                    {selectedDay.events.map(ev => (
+                      <View key={ev.id} style={styles.eventRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.eventTitle}>{ev.title}</Text>
+                          <Text style={styles.eventTime}>{ev.time}</Text>
+                        </View>
+                        <TouchableOpacity onPress={() => handleDeleteEvent(ev.id)}>
+                          <Text style={styles.eventDel}>删除</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </>
+                )}
+                {selectedDay.countdowns.length > 0 && (
+                  <>
+                    <Text style={styles.sectionTitle}>⏳ 倒计时</Text>
+                    {selectedDay.countdowns.map((cd, i) => (
+                      <Text key={i} style={styles.countdownText}>{cd.title} — 还有 {cd.daysLeft} 天</Text>
+                    ))}
+                  </>
+                )}
               </>
             )}
           </View>
         )}
       </ScrollView>
+
+      {/* FAB 添加日程 */}
+      <TouchableOpacity style={styles.fab} onPress={() => setShowAddEvent(true)} activeOpacity={0.8}>
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
+
+      <AddEventSheet visible={showAddEvent} onClose={() => setShowAddEvent(false)} onSaved={refreshData} initialDate={selectedDateRef.current} />
     </View>
   );
 }
@@ -182,4 +247,17 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   catchUpText: { color: '#FFFFFF', fontSize: fontSizes.small, fontWeight: '600' },
+  eventRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
+  eventTitle: { fontSize: fontSizes.body, color: colors.textPrimary, fontWeight: '500' },
+  eventTime: { fontSize: fontSizes.small, color: colors.textSecondary },
+  eventDel: { color: colors.danger, fontSize: fontSizes.small, fontWeight: '600' },
+  countdownText: { fontSize: fontSizes.small, color: colors.primary, marginBottom: spacing.xs },
+  fab: {
+    position: 'absolute', right: spacing.lg, bottom: spacing.xl,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 4,
+  },
+  fabText: { color: '#FFFFFF', fontSize: 28, lineHeight: 30, fontWeight: '300' },
 });
