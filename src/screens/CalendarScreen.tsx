@@ -188,7 +188,7 @@ export default function CalendarScreen() {
 
                 {/* 分区2: 日程安排 */}
                 {selectedDay.events.length > 0 && (
-                  <View style={[styles.sectionCard, { backgroundColor: '#E8F4FD' }]}>
+                  <View style={styles.sectionCardBlue}>
                     <Text style={styles.sectionCardTitle}>📆 日程安排</Text>
                     {selectedDay.events.map(ev => (
                       <View key={ev.id} style={styles.eventRow}>
@@ -196,8 +196,8 @@ export default function CalendarScreen() {
                           <Text style={styles.eventTitle}>{ev.title}</Text>
                           <Text style={styles.eventTime}>{ev.time}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => handleDeleteEvent(ev.id)}>
-                          <Text style={styles.eventDel}>删除</Text>
+                        <TouchableOpacity style={styles.eventDelBtn} onPress={() => handleDeleteEvent(ev.id)}>
+                          <Text style={styles.eventDelText}>删除</Text>
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -206,7 +206,7 @@ export default function CalendarScreen() {
 
                 {/* 分区3: 倒计时 */}
                 {selectedDay.countdowns.length > 0 && (
-                  <View style={[styles.sectionCard, { backgroundColor: '#F3EEFF' }]}>
+                  <View style={styles.sectionCardPurple}>
                     <Text style={styles.sectionCardTitle}>⏳ 倒计时</Text>
                     {selectedDay.countdowns.map((cd, i) => (
                       <Text key={i} style={styles.countdownText}>{cd.title} — 还有 {cd.daysLeft} 天</Text>
@@ -259,12 +259,15 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   catchUpText: { color: '#FFFFFF', fontSize: fontSizes.small, fontWeight: '600' },
-  sectionCard: { backgroundColor: '#F8F9FA', borderRadius: borderRadius.sm, padding: spacing.sm, marginTop: spacing.sm },
-  sectionCardTitle: { fontSize: fontSizes.caption, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
+  sectionCard: { backgroundColor: '#F8F9FA', borderRadius: borderRadius.sm, padding: spacing.md, marginTop: spacing.md, borderLeftWidth: 4, borderLeftColor: colors.primary },
+  sectionCardBlue: { backgroundColor: '#E8F4FD', borderRadius: borderRadius.sm, padding: spacing.md, marginTop: spacing.md, borderLeftWidth: 4, borderLeftColor: '#2196F3' },
+  sectionCardPurple: { backgroundColor: '#F3EEFF', borderRadius: borderRadius.sm, padding: spacing.md, marginTop: spacing.md, borderLeftWidth: 4, borderLeftColor: '#9C27B0' },
+  sectionCardTitle: { fontSize: fontSizes.body, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.sm },
   eventRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
   eventTitle: { fontSize: fontSizes.body, color: colors.textPrimary, fontWeight: '500' },
   eventTime: { fontSize: fontSizes.small, color: colors.textSecondary },
-  eventDel: { color: colors.danger, fontSize: fontSizes.small, fontWeight: '600' },
+  eventDelBtn: { backgroundColor: colors.danger, paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2, borderRadius: borderRadius.sm },
+  eventDelText: { color: '#FFFFFF', fontSize: fontSizes.small, fontWeight: '600' },
   countdownText: { fontSize: fontSizes.small, color: colors.primary, marginBottom: spacing.xs },
   fab: {
     position: 'absolute', right: spacing.lg, bottom: spacing.xl,

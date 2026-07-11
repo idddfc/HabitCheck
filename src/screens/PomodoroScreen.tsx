@@ -1,6 +1,7 @@
 // 番茄钟 Tab
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Vibration, Modal, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Vibration, Modal, ScrollView, Dimensions } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -162,23 +163,37 @@ export default function PomodoroScreen() {
         </TouchableOpacity>
       </View>
 
-      <Modal visible={fullscreen} animationType="fade" transparent={false}>
-        <TouchableOpacity activeOpacity={1} style={[styles.fullscreen, { backgroundColor: PhaseColors[phase] + 'E0' }]} onPress={resetHideTimeout}>
-          <TimerRing small />
-          {showControls && (
-            <View style={styles.fullControls}>
-              <TouchableOpacity style={[styles.fullBtn, { backgroundColor: '#FFA500' }]} onPress={pauseTimer}>
-                <Text style={styles.btnText}>暂停</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.fullBtn, { backgroundColor: 'rgba(255,255,255,0.3)' }]} onPress={skipPhase}>
-                <Text style={styles.btnText}>跳过</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.fullBtn, { backgroundColor: 'rgba(0,0,0,0.3)' }]} onPress={() => { pauseTimer(); setFullscreen(false); }}>
-                <Text style={styles.btnText}>退出屏保</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </TouchableOpacity>
+      <Modal visible={fullscreen} animationType="fade" transparent={false} statusBarTranslucent>
+        <StatusBar hidden />
+        <View style={styles.fsContainer}>
+          {(() => {
+            const { width: W, height: H } = Dimensions.get('window');
+            const isLandscape = W > H;
+            const longSide = isLandscape ? W : H;
+            const shortSide = isLandscape ? H : W;
+            return (
+              <View style={[styles.fsLandscape, { width: longSide, height: shortSide, transform: isLandscape ? [] : [{ rotate: '90deg' }] }]}>
+                <Text style={styles.fsPhaseLabel}>{phaseLabel[phase]}</Text>
+                <View style={styles.fsTimerWrap}>
+                  <Text style={[styles.fsTimer, { color: PhaseColors[phase] }]}>{fmt(seconds)}</Text>
+                </View>
+                {showControls && (
+                  <View style={styles.fsControls}>
+                    <TouchableOpacity style={[styles.fsBtn, { backgroundColor: '#FFA500' }]} onPress={pauseTimer}>
+                      <Text style={styles.fsBtnText}>暂停</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.fsBtn, { backgroundColor: 'rgba(255,255,255,0.15)' }]} onPress={skipPhase}>
+                      <Text style={styles.fsBtnText}>跳过</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.fsBtn, { backgroundColor: 'rgba(255,255,255,0.08)' }]} onPress={() => { pauseTimer(); setFullscreen(false); }}>
+                      <Text style={styles.fsBtnText}>退出</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
+        </View>
       </Modal>
 
       <Modal visible={showSettings} animationType="slide" transparent>
@@ -247,6 +262,14 @@ const styles = StyleSheet.create({
   fullscreen: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   fullControls: { position: 'absolute', bottom: 80, gap: spacing.md },
   fullBtn: { paddingHorizontal: 32, paddingVertical: spacing.md, borderRadius: borderRadius.full, marginTop: spacing.sm },
+  fsContainer: { flex: 1, backgroundColor: '#0D0D1A', alignItems: 'center', justifyContent: 'center' },
+  fsLandscape: { alignItems: 'center', justifyContent: 'center' },
+  fsPhaseLabel: { fontSize: 22, fontWeight: '600', color: '#777', marginBottom: 36, letterSpacing: 3 },
+  fsTimerWrap: { marginBottom: 48 },
+  fsTimer: { fontSize: 88, fontWeight: '200', fontVariant: ['tabular-nums'], letterSpacing: 6 },
+  fsControls: { flexDirection: 'row', gap: spacing.md },
+  fsBtn: { paddingHorizontal: 32, paddingVertical: 14, borderRadius: borderRadius.full },
+  fsBtnText: { color: '#DDD', fontSize: fontSizes.body, fontWeight: '500' },
   settingsOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   settingsCard: { backgroundColor: colors.cardBackground, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.lg, maxHeight: '80%' },
   settingsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
