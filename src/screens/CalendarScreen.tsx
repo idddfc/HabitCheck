@@ -120,11 +120,17 @@ export default function CalendarScreen() {
 
   function handleCatchUp(habitId: string) {
     const dateStr = selectedDateRef.current;
+    const today = getToday();
+    // 禁止补签未来日期
+    if (dateStr > today) {
+      Alert.alert('提示', '小小凡人竟敢窥见天机');
+      return;
+    }
     addCheckin(habitId, dateStr);
     loadDayDetail(dateStr);
     loadCalendarData();
   }
-
+  
   function handleDeleteEvent(eventId: string) {
     deleteEvent(eventId);
     cancelEventNotification(eventId);
