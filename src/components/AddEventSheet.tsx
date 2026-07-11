@@ -6,9 +6,10 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, fontSizes, spacing, borderRadius } from '../theme';
-import { addEvent } from '../utils/schedule';
-import { scheduleOneTimeNotification } from '../utils/notifications';
+import { addEvent, updateEvent } from '../utils/schedule';
+import { scheduleOneTimeNotification, cancelEventNotification } from '../utils/notifications';
 import { getToday } from '../utils/storage';
+import type { ScheduleEvent } from '../types';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -17,9 +18,10 @@ interface Props {
   onClose: () => void;
   onSaved: () => void;
   initialDate?: string;
+  editEvent?: ScheduleEvent;
 }
 
-export default function AddEventSheet({ visible, onClose, onSaved, initialDate }: Props) {
+export default function AddEventSheet({ visible, onClose, onSaved, initialDate, editEvent }: Props) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(getToday());
@@ -31,24 +33,28 @@ export default function AddEventSheet({ visible, onClose, onSaved, initialDate }
 
   useEffect(() => {
     if (!visible) { slideAnim.setValue(SCREEN_HEIGHT); return; }
-    setTitle(''); setDate(initialDate || getToday()); setTime('12:00');
-    setNote(''); setRemindOn(false);
+    if (editEvent) {
+      setTitle(editEvent.title); setDate(editEvent.date); setTime(editEvent.time);
+      setNote(editEvent.note || ''); setRemindOn(!!editEvent.remindBefore);
+    } else {
+      setTitle(''); setDate(initialDate || getToday()); setTime('12:00');
+      setNote(''); setRemindOn(false);
+    }
     Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, stiffness: 300, damping: 30 }).start();
-  }, [visible, initialDate]);
+  }, [visible, initialDate, editEvent]);
 
   const handleClose = () =>
     Animated.timing(slideAnim, { toValue: SCREEN_HEIGHT, duration: 250, useNativeDriver: true }).start(onClose);
 
   const handleSave = async () => {
     if (!title.trim()) return;
-    const event = addEvent({
-      title: title.trim(),
-      date, time,
-      note: note.trim() || undefined,
-      remindBefore: remindOn ? 10 : undefined,
-    });
-    if (remindOn) {
-      await scheduleOneTimeNotification(event.id, event.title, date, time, event.remindBefore || 0);
+    if (editEvent) {
+      updateEvent(editEvent.id, { title: title.trim(), date, time, note: note.trim() || undefined, remindBefore: remindOn ? 10 : undefined });
+      await cancelEventNotification(editEvent.id);
+      if (remindOn) await scheduleOneTimeNotification(editEvent.id, title.trim(), date, time, 10);
+    } else {
+      const event = addEvent({ title: title.trim(), date, time, note: note.trim() || undefined, remindBefore: remindOn ? 10 : undefined });
+      if (remindOn) await scheduleOneTimeNotification(event.id, event.title, date, time, event.remindBefore || 0);
     }
     onSaved();
     onClose();
@@ -60,7 +66,7 @@ export default function AddEventSheet({ visible, onClose, onSaved, initialDate }
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={handleClose} />
         <Animated.View style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}>
           <View style={styles.handleBar} />
-          <Text style={styles.sheetTitle}>添加日程</Text>
+          <Text style={styles.sheetTitle}>{editEvent ? '编辑日程' : '添加日程'}</Text>
           <View style={styles.body}>
             <Text style={styles.label}>标题</Text>
             <TextInput style={styles.input} placeholder="例如：团队周会" placeholderTextColor={colors.textSecondary} value={title} onChangeText={setTitle} />

@@ -1,6 +1,7 @@
 # CLAUDE.md — HabitCheck 项目 AI 助手指引
 
 > 本文件为 GitHub Copilot / Claude 等 AI 助手提供项目上下文、标准文件路径和工作流程说明。
+> 最后更新: 2026-07-11（v1.1.0）
 
 ---
 
@@ -17,31 +18,48 @@
 
 ---
 
-## 🔧 技术栈
+## 🔧 技术栈（当前版本 v1.1.0）
 
-- **框架**: React Native + Expo (SDK 52+)
+- **框架**: React Native + Expo (SDK 56)
 - **语言**: TypeScript (strict mode)
-- **导航**: @react-navigation/native + @react-navigation/bottom-tabs
-- **存储**: @react-native-async-storage/async-storage
-- **通知**: expo-notifications (本地通知)
+- **导航**: @react-navigation/native + @react-navigation/bottom-tabs v7
+- **存储**: expo-file-system (Paths.document + sync read/write, JSON)
+- **UUID**: expo-crypto.randomUUID()
+- **通知**: expo-notifications (DAILY + DATE trigger)
 - **日历**: react-native-calendars
+- **时间选择器**: @react-native-community/datetimepicker 9.1.0
 - **动画**: react-native-reanimated
-- **触觉**: expo-haptics
+- **触觉**: expo-haptics (打卡 + 番茄钟)
 - **SVG**: react-native-svg
-- **ID**: uuid (v4)
+- **构建**: EAS Build (preview profile → APK)
 
 ---
+
+## � 项目结构
+
+```
+src/
+├── components/
+│   ├── AddEventSheet.tsx   # 日程弹窗
+│   ├── AddTaskSheet.tsx    # 习惯弹窗
+│   ├── HabitCard.tsx       # 习惯卡片
+│   └── RingProgress.tsx    # 环形进度
+├── screens/ (Today/Calendar/Stats/Pomodoro/Settings)
+├── hooks/ (useTodayHabits, useStats)
+├── utils/ (storage, streak, notifications, pomodoro, schedule)
+├── theme/index.ts
+└── types/index.ts
+```
 
 ## 📐 命名规范
 
 | 类别 | 规范 | 示例 |
 |------|------|------|
-| 文件名 | PascalCase（组件）/ camelCase（工具/hook） | `HabitCard.tsx`, `storage.ts`, `useStats.ts` |
-| 组件 | PascalCase | `RingProgress`, `AddTaskSheet` |
-| Hook | `use` 前缀 + camelCase | `useTodayHabits`, `useStats` |
-| 类型/接口 | PascalCase, `I` 前缀（接口） | `Habit`, `ICheckIn` |
-| 常量 | UPPER_SNAKE_CASE（主题）/ camelCase | `PRIMARY_COLOR`, `fontSizes` |
-| AsyncStorage Key | `@` 前缀 + kebab-case | `@habits`, `@checkins` |
+| 文件名 | PascalCase（组件）/ camelCase（工具） | `HabitCard.tsx`, `storage.ts` |
+| 组件 | PascalCase | `RingProgress`, `AddEventSheet` |
+| Hook | `use` 前缀 + camelCase | `useTodayHabits` |
+| 类型/接口 | PascalCase | `Habit`, `ScheduleEvent` |
+| 数据文件 | kebab-case JSON | `habits.json`, `events.json` |
 
 ---
 
@@ -66,16 +84,17 @@
 
 ## ⚠️ 注意事项
 
-- **不要**修改 `@react-navigation` 的核心配置文件，除非明确需要
-- **不要**直接操作 AsyncStorage，必须通过 `src/utils/storage.ts` 封装函数
-- **不要**在组件中直接计算 streak/完成率，使用 `src/utils/streak.ts` 工具函数
-- 所有颜色、字号、间距使用 `src/theme/index.ts` 中的常量，禁止硬编码
-- 通知相关操作统一使用 `src/utils/notifications.ts`
-- 每次数据变更后，通过 hook 刷新 UI，不要手动 setState
-- 保持 TypeScript strict mode，禁止 `any` 类型
+- **不要**直接操作文件系统，通过 `src/utils/` 封装函数
+- streak 计算用 `streak.ts`，通知用 `notifications.ts`，日程用 `schedule.ts`，番茄钟用 `pomodoro.ts`
+- 颜色/字号/间距用 `theme/index.ts` 常量，禁止硬编码
+- 每次数据变更后通过 hook 或 refresh 刷新 UI
+- TypeScript strict mode，禁用 `any`
+- 删除习惯务必 `await cancelNotification(id)`；删除日程务必 `cancelEventNotification(id)`
 
 ---
 
 ## 🎯 当前阶段
 
-参考 `docs/implementation-plan.md` 中的当前执行步骤。
+**v1.1.0 完成** → 下一版本 v1.1.1：
+- 番茄钟全屏屏保 + 设置面板 + 跳过按钮
+- 日历分区重构 + 倒计时全局显示 + 日程编辑/左滑删除

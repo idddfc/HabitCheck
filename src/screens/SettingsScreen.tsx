@@ -84,7 +84,7 @@ export default function SettingsScreen() {
             React Native + Expo  |  本地存储  |  无需网络
           </Text>
           <Text style={styles.aboutMeta}>
-            开发者：idddfc  |  https://github.com/idddfc
+            开发者：idddfc  |  https://github.com/idddfc/HabitCheck
           </Text>
         </View>
       </ScrollView>

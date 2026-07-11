@@ -41,6 +41,15 @@ export function addEvent(event: Omit<ScheduleEvent, 'id' | 'createdAt'>): Schedu
   return e;
 }
 
+export function updateEvent(id: string, updates: Partial<Omit<ScheduleEvent, 'id' | 'createdAt'>>): ScheduleEvent | null {
+  const all = readEvents();
+  const i = all.findIndex(e => e.id === id);
+  if (i === -1) return null;
+  all[i] = { ...all[i], ...updates };
+  writeEvents(all);
+  return all[i];
+}
+
 export function deleteEvent(id: string): void {
   writeEvents(readEvents().filter(e => e.id !== id));
 }

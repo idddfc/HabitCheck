@@ -8,7 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { colors, fontSizes, spacing, borderRadius, shadows } from '../theme';
 import { getHabits, getAllCheckins, getToday, addCheckin } from '../utils/storage';
 import { isHabitDueOn } from '../utils/streak';
-import { getEvents, deleteEvent } from '../utils/schedule';
+import { getEvents, deleteEvent, updateEvent } from '../utils/schedule';
 import { cancelEventNotification } from '../utils/notifications';
 import AddEventSheet from '../components/AddEventSheet';
 import type { Habit, CheckIn, ScheduleEvent } from '../types';
@@ -37,6 +37,7 @@ export default function CalendarScreen() {
   const [selectedDay, setSelectedDay] = useState<DayDetail | null>(null);
   const [currentMonth, setCurrentMonth] = useState(() => getToday().slice(0, 7));
   const [showAddEvent, setShowAddEvent] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<ScheduleEvent | undefined>(undefined);
   const selectedDateRef = React.useRef(getToday());
 
   useFocusEffect(useCallback(() => { refreshData(); }, []));
@@ -101,14 +102,15 @@ export default function CalendarScreen() {
     }
 
     const dayEvents = getEvents(dateStr);
+    // 倒计时：始终显示选中日期距所有未来事件的天数
     const countdowns: { title: string; daysLeft: number }[] = [];
     const today = getToday();
     const allEvents = getEvents();
+    const currentDate = new Date(dateStr + 'T00:00:00');
     for (const e of allEvents) {
-      if (e.date >= today && e.date > dateStr) {
-        const d1 = new Date(dateStr + 'T00:00:00');
-        const d2 = new Date(e.date + 'T00:00:00');
-        const diff = Math.ceil((d2.getTime() - d1.getTime()) / 86400000);
+      if (e.date >= today) {
+        const evDate = new Date(e.date + 'T00:00:00');
+        const diff = Math.ceil((evDate.getTime() - currentDate.getTime()) / 86400000);
         if (diff > 0) countdowns.push({ title: e.title, daysLeft: diff });
       }
     }
@@ -152,54 +154,64 @@ export default function CalendarScreen() {
               <Text style={styles.noData}>当天无任务</Text>
             ) : (
               <>
-                {selectedDay.completed.length > 0 && (
-                  <>
-                    <Text style={styles.sectionTitle}>✅ 已完成</Text>
-                    {selectedDay.completed.map(h => (
-                      <View key={h.id} style={styles.habitRow}>
-                        <Text style={styles.emoji}>{h.emoji}</Text>
-                        <Text style={styles.habitName}>{h.name}</Text>
-                      </View>
-                    ))}
-                  </>
+                {/* 分区1: 习惯打卡 */}
+                {(selectedDay.completed.length > 0 || selectedDay.missed.length > 0) && (
+                  <View style={styles.sectionCard}>
+                    <Text style={styles.sectionCardTitle}>📋 习惯打卡</Text>
+                    {selectedDay.completed.length > 0 && (
+                      <>
+                        <Text style={styles.sectionTitle}>✅ 已完成</Text>
+                        {selectedDay.completed.map(h => (
+                          <View key={h.id} style={styles.habitRow}>
+                            <Text style={styles.emoji}>{h.emoji}</Text>
+                            <Text style={styles.habitName}>{h.name}</Text>
+                          </View>
+                        ))}
+                      </>
+                    )}
+                    {selectedDay.missed.length > 0 && (
+                      <>
+                        <Text style={styles.sectionTitle}>❌ 未完成</Text>
+                        {selectedDay.missed.map(h => (
+                          <View key={h.id} style={styles.habitRow}>
+                            <Text style={styles.emoji}>{h.emoji}</Text>
+                            <Text style={styles.habitName}>{h.name}</Text>
+                            <TouchableOpacity style={styles.catchUpBtn} onPress={() => handleCatchUp(h.id)}>
+                              <Text style={styles.catchUpText}>补签</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+                      </>
+                    )}
+                  </View>
                 )}
-                {selectedDay.missed.length > 0 && (
-                  <>
-                    <Text style={styles.sectionTitle}>❌ 未完成</Text>
-                    {selectedDay.missed.map(h => (
-                      <View key={h.id} style={styles.habitRow}>
-                        <Text style={styles.emoji}>{h.emoji}</Text>
-                        <Text style={styles.habitName}>{h.name}</Text>
-                        <TouchableOpacity style={styles.catchUpBtn} onPress={() => handleCatchUp(h.id)}>
-                          <Text style={styles.catchUpText}>补签</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </>
-                )}
+
+                {/* 分区2: 日程安排 */}
                 {selectedDay.events.length > 0 && (
-                  <>
-                    <Text style={styles.sectionTitle}>📋 日程</Text>
+                  <View style={[styles.sectionCard, { backgroundColor: '#E8F4FD' }]}>
+                    <Text style={styles.sectionCardTitle}>📆 日程安排</Text>
                     {selectedDay.events.map(ev => (
                       <View key={ev.id} style={styles.eventRow}>
-                        <View style={{ flex: 1 }}>
+                        <TouchableOpacity style={{ flex: 1 }} onPress={() => { cancelEventNotification(ev.id); setEditingEvent(ev); }}>
                           <Text style={styles.eventTitle}>{ev.title}</Text>
                           <Text style={styles.eventTime}>{ev.time}</Text>
-                        </View>
+                        </TouchableOpacity>
                         <TouchableOpacity onPress={() => handleDeleteEvent(ev.id)}>
                           <Text style={styles.eventDel}>删除</Text>
                         </TouchableOpacity>
                       </View>
                     ))}
-                  </>
+                  </View>
                 )}
+
+                {/* 分区3: 倒计时 */}
                 {selectedDay.countdowns.length > 0 && (
-                  <>
-                    <Text style={styles.sectionTitle}>⏳ 倒计时</Text>
+                  <View style={[styles.sectionCard, { backgroundColor: '#F3EEFF' }]}>
+                    <Text style={styles.sectionCardTitle}>⏳ 倒计时</Text>
                     {selectedDay.countdowns.map((cd, i) => (
                       <Text key={i} style={styles.countdownText}>{cd.title} — 还有 {cd.daysLeft} 天</Text>
                     ))}
-                  </>
+                  </View>
                 )}
               </>
             )}
@@ -212,7 +224,7 @@ export default function CalendarScreen() {
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
 
-      <AddEventSheet visible={showAddEvent} onClose={() => setShowAddEvent(false)} onSaved={refreshData} initialDate={selectedDateRef.current} />
+      <AddEventSheet visible={showAddEvent || !!editingEvent} onClose={() => { setShowAddEvent(false); setEditingEvent(undefined); }} onSaved={refreshData} initialDate={selectedDateRef.current} editEvent={editingEvent} />
     </View>
   );
 }
@@ -247,6 +259,8 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   catchUpText: { color: '#FFFFFF', fontSize: fontSizes.small, fontWeight: '600' },
+  sectionCard: { backgroundColor: '#F8F9FA', borderRadius: borderRadius.sm, padding: spacing.sm, marginTop: spacing.sm },
+  sectionCardTitle: { fontSize: fontSizes.caption, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
   eventRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
   eventTitle: { fontSize: fontSizes.body, color: colors.textPrimary, fontWeight: '500' },
   eventTime: { fontSize: fontSizes.small, color: colors.textSecondary },
