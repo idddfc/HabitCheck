@@ -1,14 +1,83 @@
 // 番茄钟 Tab
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Vibration, Modal, ScrollView, Dimensions } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Vibration,
+  Modal,
+  ScrollView,
+  Dimensions,
+  Animated,
+  TouchableWithoutFeedback,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { colors, fontSizes, spacing, borderRadius, shadows } from '../theme';
+import { colors, fontSizes, spacing, borderRadius } from '../theme';
 import { getSettings, getTodayRecord, incrementTodayRecord, saveSettings } from '../utils/pomodoro';
+import CustomWheelPicker from '../components/CustomWheelPicker';
 
 type Phase = 'work' | 'break' | 'longBreak';
+
+// 步骤定义
+type Step = 'workDuration' | 'breakDuration' | 'longBreakDuration' | 'sessions';
+
+const STEP_ORDER: Step[] = ['workDuration', 'breakDuration', 'longBreakDuration', 'sessions'];
+
+// 每个步骤对应的图标和标签
+const STEP_CONFIG: Record<Step, { icon: string; label: string; options: string[] }> = {
+  workDuration: {
+    icon: '🍅',
+    label: '工作时长',
+    options: Array.from({ length: 60 }, (_, i) => `${i + 1} 分钟`),
+  },
+  breakDuration: {
+    icon: '☕',
+    label: '短休时长',
+    options: Array.from({ length: 30 }, (_, i) => `${i + 1} 分钟`),
+  },
+  longBreakDuration: {
+    icon: '🧘',
+    label: '长休时长',
+    options: Array.from({ length: 60 }, (_, i) => `${i + 1} 分钟`),
+  },
+  sessions: {
+    icon: '🔢',
+    label: '番茄次数',
+    options: Array.from({ length: 10 }, (_, i) => `${i + 1} 个`),
+  },
+};
+
+// 获取某个步骤对应的当前值（从 settingsDraft 中读取）
+const getStepValue = (step: Step, settings: any): number => {
+  switch (step) {
+    case 'workDuration':
+      return settings.workDuration;
+    case 'breakDuration':
+      return settings.breakDuration;
+    case 'longBreakDuration':
+      return settings.longBreakDuration;
+    case 'sessions':
+      return settings.sessionsBeforeLongBreak;
+  }
+};
+
+// 更新 settingsDraft 中某个步骤的值
+const setStepValue = (step: Step, settings: any, value: number): any => {
+  switch (step) {
+    case 'workDuration':
+      return { ...settings, workDuration: value };
+    case 'breakDuration':
+      return { ...settings, breakDuration: value };
+    case 'longBreakDuration':
+      return { ...settings, longBreakDuration: value };
+    case 'sessions':
+      return { ...settings, sessionsBeforeLongBreak: value };
+  }
+};
 
 export default function PomodoroScreen() {
   const insets = useSafeAreaInsets();
@@ -19,8 +88,15 @@ export default function PomodoroScreen() {
   const [todayDone, setTodayDone] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
+  
+  // 设置面板相关状态
+  const [showPickerModal, setShowPickerModal] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState(getSettings());
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  
+  // 缩放动画
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settings = useRef(getSettings());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -102,12 +178,65 @@ export default function PomodoroScreen() {
     return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
   };
 
-  const onSaveSettings = () => {
+  // 打开设置选择器
+  const openPickerModal = () => {
+    setSettingsDraft(settings.current);
+    setCurrentStepIndex(0);
+    setShowPickerModal(true);
+    scaleAnim.setValue(0);
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 8,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // 关闭选择器（不保存）
+  const closePickerModal = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0,
+      friction: 8,
+      tension: 40,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowPickerModal(false);
+    });
+  };
+
+  // 保存并关闭
+  const saveAndClose = () => {
     saveSettings(settingsDraft);
     settings.current = settingsDraft;
-    setShowSettings(false);
-    if (!running) { setSeconds(settingsDraft.workDuration * 60); setPhase('work'); setSessionCount(0); }
+    if (!running) {
+      setSeconds(settingsDraft.workDuration * 60);
+      setPhase('work');
+      setSessionCount(0);
+    }
+    closePickerModal();
   };
+
+  // 下一步
+  const goToNextStep = () => {
+    if (currentStepIndex < STEP_ORDER.length - 1) {
+      setCurrentStepIndex(currentStepIndex + 1);
+    } else {
+      saveAndClose();
+    }
+  };
+
+  // 返回上一步
+  const goToPreviousStep = () => {
+    if (currentStepIndex > 0) {
+      setCurrentStepIndex(currentStepIndex - 1);
+    }
+  };
+
+  const currentStep = STEP_ORDER[currentStepIndex];
+  const currentConfig = STEP_CONFIG[currentStep];
+  const currentValue = getStepValue(currentStep, settingsDraft);
+  const currentOptions = currentConfig.options;
+  const currentIndex = Math.max(0, Math.min(currentValue - 1, currentOptions.length - 1));
 
   const PhaseColors = { work: '#FF6B6B', break: '#4ECDC4', longBreak: '#6C63FF' };
   const phaseLabel = { work: '🍅 专注', break: '☕ 短休', longBreak: '🧘 长休' };
@@ -116,8 +245,6 @@ export default function PomodoroScreen() {
     : phase === 'break'
       ? 1 - seconds / (settings.current.breakDuration * 60)
       : 1 - seconds / (settings.current.longBreakDuration * 60);
-
-  const fmtsettings = (v: number) => `${v} 分钟`;
 
   const TimerRing = ({ small }: { small?: boolean }) => (
     <View style={styles.ring}>
@@ -134,14 +261,16 @@ export default function PomodoroScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>番茄钟</Text>
-        <TouchableOpacity onPress={() => { setSettingsDraft(settings.current); setShowSettings(true); }}>
-          <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
-      </View>
+  <Text style={styles.title}>番茄钟</Text>
+  <TouchableOpacity onPress={openPickerModal}>
+    <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
+  </TouchableOpacity>
+</View>
       <Text style={styles.subtitle}>今日已完成 {todayDone} 个番茄</Text>
 
-      <TimerRing />
+      <TouchableOpacity onPress={openPickerModal} activeOpacity={0.7}>
+        <TimerRing />
+      </TouchableOpacity>
 
       <View style={styles.controls}>
         {!running ? (
@@ -196,47 +325,101 @@ export default function PomodoroScreen() {
         </View>
       </Modal>
 
-      <Modal visible={showSettings} animationType="slide" transparent>
-        <View style={styles.settingsOverlay}>
-          <View style={styles.settingsCard}>
-            <View style={styles.settingsHeader}>
-              <Text style={styles.sheetTitle}>番茄钟设置</Text>
-              <TouchableOpacity onPress={() => setShowSettings(false)}>
-                <Ionicons name="close" size={24} color={colors.textSecondary} />
-              </TouchableOpacity>
+      {/* 放大选择器 Modal */}
+      <Modal visible={showPickerModal} transparent={true} animationType="none" statusBarTranslucent>
+  <View style={styles.pickerOverlay}>
+    {/* 背景层：点击关闭（但不拦截内容手势） */}
+    <TouchableWithoutFeedback onPress={closePickerModal}>
+      <View style={StyleSheet.absoluteFill} />
+    </TouchableWithoutFeedback>
+
+    {/* 内容层：不受背景点击影响，内部 FlatList 可正常滚动 */}
+    <Animated.View
+      style={[
+        styles.pickerContainer,
+        {
+          transform: [{ scale: scaleAnim }],
+          opacity: scaleAnim,
+        },
+      ]}
+      pointerEvents="auto"
+    >
+      {/* 顶部：步骤标题 + 关闭按钮 */}
+      <View style={styles.pickerHeader}>
+        <Text style={styles.pickerTitle}>{currentConfig.label}</Text>
+        <TouchableOpacity onPress={closePickerModal} style={styles.pickerCloseBtn}>
+          <Ionicons name="close" size={28} color={colors.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* 中间：自定义滚轮 */}
+      <View style={styles.pickerWheelWrapper}>
+        <CustomWheelPicker
+          options={currentOptions}
+          selectedIndex={currentIndex}
+          onChange={(index) => {
+            const newValue = index + 1;
+            setSettingsDraft(setStepValue(currentStep, settingsDraft, newValue));
+          }}
+          itemHeight={50}
+          height={250}
+          containerStyle={styles.pickerWheel}
+          selectedIndicatorStyle={styles.pickerSelectedIndicator}
+          itemTextStyle={styles.pickerWheelText}
+          selectedItemTextStyle={styles.pickerWheelSelectedText}
+        />
+        {currentStepIndex > 0 && (
+          <TouchableOpacity style={styles.backButton} onPress={goToPreviousStep}>
+            <Ionicons name="chevron-back" size={18} color={colors.textSecondary} />
+            <Text style={styles.backButtonText}>返回</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* 底部：四个进度图标 */}
+      <View style={styles.stepIndicators}>
+        {STEP_ORDER.map((step, index) => {
+          const config = STEP_CONFIG[step];
+          const isActive = index === currentStepIndex;
+          const isCompleted = index < currentStepIndex;
+          return (
+            <View key={step} style={styles.stepIndicatorItem}>
+              <View
+                style={[
+                  styles.stepIconCircle,
+                  isActive && styles.stepIconActive,
+                  isCompleted && styles.stepIconCompleted,
+                ]}
+              >
+                <Text style={[
+                  styles.stepIconText,
+                  isActive && styles.stepIconTextActive,
+                  isCompleted && styles.stepIconTextCompleted,
+                ]}>
+                  {config.icon}
+                </Text>
+              </View>
+              <Text style={[
+                styles.stepLabel,
+                isActive && styles.stepLabelActive,
+                isCompleted && styles.stepLabelCompleted,
+              ]}>
+                {config.label}
+              </Text>
             </View>
-            <ScrollView>
-              <Text style={styles.settingLabel}>工作时长</Text>
-              <View style={styles.optionRow}>{[15,20,25,30,45,60].map(v => (
-                <TouchableOpacity key={v} style={[styles.option, settingsDraft.workDuration===v && styles.optionActive]} onPress={() => setSettingsDraft({...settingsDraft, workDuration:v})}>
-                  <Text style={[styles.optionText, settingsDraft.workDuration===v && styles.optionTextActive]}>{v}分</Text>
-                </TouchableOpacity>
-              ))}</View>
-              <Text style={styles.settingLabel}>短休时长</Text>
-              <View style={styles.optionRow}>{[3,5,10,15].map(v => (
-                <TouchableOpacity key={v} style={[styles.option, settingsDraft.breakDuration===v && styles.optionActive]} onPress={() => setSettingsDraft({...settingsDraft, breakDuration:v})}>
-                  <Text style={[styles.optionText, settingsDraft.breakDuration===v && styles.optionTextActive]}>{v}分</Text>
-                </TouchableOpacity>
-              ))}</View>
-              <Text style={styles.settingLabel}>长休时长</Text>
-              <View style={styles.optionRow}>{[10,15,20,30].map(v => (
-                <TouchableOpacity key={v} style={[styles.option, settingsDraft.longBreakDuration===v && styles.optionActive]} onPress={() => setSettingsDraft({...settingsDraft, longBreakDuration:v})}>
-                  <Text style={[styles.optionText, settingsDraft.longBreakDuration===v && styles.optionTextActive]}>{v}分</Text>
-                </TouchableOpacity>
-              ))}</View>
-              <Text style={styles.settingLabel}>几个番茄后长休</Text>
-              <View style={styles.optionRow}>{[2,3,4,5].map(v => (
-                <TouchableOpacity key={v} style={[styles.option, settingsDraft.sessionsBeforeLongBreak===v && styles.optionActive]} onPress={() => setSettingsDraft({...settingsDraft, sessionsBeforeLongBreak:v})}>
-                  <Text style={[styles.optionText, settingsDraft.sessionsBeforeLongBreak===v && styles.optionTextActive]}>{v}个</Text>
-                </TouchableOpacity>
-              ))}</View>
-            </ScrollView>
-            <TouchableOpacity style={styles.saveBtn} onPress={onSaveSettings}>
-              <Text style={styles.saveBtnText}>保存</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+          );
+        })}
+      </View>
+
+      {/* 底部按钮 */}
+      <TouchableOpacity style={styles.pickerNextBtn} onPress={goToNextStep}>
+        <Text style={styles.pickerNextBtnText}>
+          {currentStepIndex === STEP_ORDER.length - 1 ? '完成' : '下一步'}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  </View>
+</Modal>
     </View>
   );
 }
@@ -259,9 +442,6 @@ const styles = StyleSheet.create({
   btnText: { color: '#FFF', fontSize: fontSizes.body, fontWeight: '700' },
   btnOutline: { paddingHorizontal: 32, paddingVertical: spacing.md, borderRadius: borderRadius.full, borderWidth: 2, borderColor: colors.primary },
   btnOutlineText: { color: colors.primary, fontSize: fontSizes.body, fontWeight: '700' },
-  fullscreen: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  fullControls: { position: 'absolute', bottom: 80, gap: spacing.md },
-  fullBtn: { paddingHorizontal: 32, paddingVertical: spacing.md, borderRadius: borderRadius.full, marginTop: spacing.sm },
   fsContainer: { flex: 1, backgroundColor: '#0D0D1A', alignItems: 'center', justifyContent: 'center' },
   fsLandscape: { alignItems: 'center', justifyContent: 'center' },
   fsPhaseLabel: { fontSize: 22, fontWeight: '600', color: '#777', marginBottom: 36, letterSpacing: 3 },
@@ -270,16 +450,143 @@ const styles = StyleSheet.create({
   fsControls: { flexDirection: 'row', gap: spacing.md },
   fsBtn: { paddingHorizontal: 32, paddingVertical: 14, borderRadius: borderRadius.full },
   fsBtnText: { color: '#DDD', fontSize: fontSizes.body, fontWeight: '500' },
-  settingsOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  settingsCard: { backgroundColor: colors.cardBackground, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.lg, maxHeight: '80%' },
-  settingsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  sheetTitle: { fontSize: fontSizes.h2, fontWeight: '700', color: colors.textPrimary },
-  settingLabel: { fontSize: fontSizes.caption, fontWeight: '600', color: colors.textSecondary, marginTop: spacing.md, marginBottom: spacing.xs },
-  optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  option: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.full, backgroundColor: '#F1F3F5' },
-  optionActive: { backgroundColor: colors.primary + '20', borderWidth: 1.5, borderColor: colors.primary },
-  optionText: { fontSize: fontSizes.caption, color: colors.textSecondary },
-  optionTextActive: { color: colors.primary, fontWeight: '600' },
-  saveBtn: { backgroundColor: colors.primary, borderRadius: borderRadius.sm, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
-  saveBtnText: { color: '#FFF', fontSize: fontSizes.body, fontWeight: '600' },
+
+  pickerOverlay: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: 'rgba(0,0,0,0.5)',
+},
+  pickerContainer: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: 24,
+    padding: spacing.lg,
+    width: '92%',
+    maxWidth: 400,
+    maxHeight: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.3,
+    shadowRadius: 40,
+    elevation: 10,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  pickerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  pickerCloseBtn: {
+    padding: 4,
+  },
+  pickerWheelWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerWheel: {
+    height: 250,
+    width: '100%',
+    backgroundColor: '#F8F9FA',
+    borderRadius: borderRadius.sm,
+    overflow: 'hidden',
+  },
+  pickerSelectedIndicator: {
+    backgroundColor: colors.primary + '20',
+    borderRadius: borderRadius.sm,
+    marginHorizontal: 8,
+  },
+  pickerWheelText: {
+    fontSize: 18,
+    color: colors.textSecondary,
+  },
+  pickerWheelSelectedText: {
+    fontSize: 22,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  backButton: {
+    position: 'absolute',
+    bottom: 8,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 12,
+  },
+  backButtonText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  stepIndicators: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.sm,
+  },
+  stepIndicatorItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  stepIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F1F3F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  stepIconActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '15',
+  },
+  stepIconCompleted: {
+    backgroundColor: colors.primary + '10',
+  },
+  stepIconText: {
+    fontSize: 20,
+    opacity: 0.4,
+  },
+  stepIconTextActive: {
+    opacity: 1,
+  },
+  stepIconTextCompleted: {
+    opacity: 0.7,
+  },
+  stepLabel: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    opacity: 0.5,
+  },
+  stepLabelActive: {
+    color: colors.primary,
+    fontWeight: '600',
+    opacity: 1,
+  },
+  stepLabelCompleted: {
+    opacity: 0.7,
+  },
+  pickerNextBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  pickerNextBtnText: {
+    color: '#FFF',
+    fontSize: fontSizes.body,
+    fontWeight: '600',
+  },
 });
