@@ -123,7 +123,7 @@ export default function CalendarScreen() {
     const today = getToday();
     // 禁止补签未来日期
     if (dateStr > today) {
-      Alert.alert('提示', '小小凡人竟敢窥见天机');
+      Alert.alert('大胆', '给你个按钮你还真想操控未来啊?');
       return;
     }
     addCheckin(habitId, dateStr);
